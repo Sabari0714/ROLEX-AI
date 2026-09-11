@@ -1,0 +1,7 @@
+# ROLEX AI runtime dependencies
+# Android Java bridges (jnius) are supplied by python-for-android.
+kivy==2.3.1
+pypdf
+python-docx
+openpyxl
+python-pptx
