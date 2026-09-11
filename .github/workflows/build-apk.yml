@@ -8,7 +8,7 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -40,14 +40,25 @@ jobs:
           python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Build APK
+        shell: bash
         run: |
+          set -euxo pipefail
           rm -rf .buildozer bin
-          buildozer android debug
+          SDKROOT="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDKROOT/licenses"
+          printf '%s\n' 8933bad161af4178b1185d1a37fbf41ea5269c55 d56f5187479451eabf01fb78af6dfcb131a6481e > "$SDKROOT/licenses/android-sdk-license"
+          printf '%s\n' 84831b9409646a918e30573bab4c9c91346d8abd > "$SDKROOT/licenses/android-sdk-preview-license"
+          export ANDROID_SDK_ROOT="$SDKROOT"
+          export ANDROID_HOME="$SDKROOT"
+          buildozer android debug 2>&1 | tee buildozer-console.log
 
       - name: Verify APK
+        shell: bash
         run: |
-          test -n "$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
-          ls -lh bin/*.apk
+          set -euxo pipefail
+          APK="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -56,10 +67,12 @@ jobs:
           path: bin/*.apk
           if-no-files-found: error
 
-      - name: Upload build log
+      - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ROLEX-AI-build-log
-          path: .buildozer/**/*.log
+          name: ROLEX-AI-build-diagnostics
+          path: |
+            buildozer-console.log
+            .buildozer/**/*.log
           if-no-files-found: ignore
