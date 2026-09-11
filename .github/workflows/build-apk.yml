@@ -46,6 +46,20 @@ jobs:
           rm -rf .buildozer bin
           export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
+
+          # Buildozer creates the legacy SDK layout itself. Create the license
+          # files before its first sdkmanager invocation so sdkmanager does not
+          # stop on an interactive license prompt.
+          mkdir -p "$ANDROID_SDK_ROOT/licenses"
+          printf '%s\n' \
+            8933bad161af4178b1185d1a37fbf41ea5269c55 \
+            d56f5187479451eabf01fb78af6dfcb131a6481e \
+            24333f8a63b6825ea9c5514f83c2829b004d1fee \
+            > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          printf '%s\n' \
+            84831b9409646a918e30573bab4c9c91346d8abd \
+            > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
+
           set +e
           buildozer android debug 2>&1 | tee buildozer-bootstrap.log
           FIRST_STATUS=${PIPESTATUS[0]}
@@ -54,20 +68,22 @@ jobs:
 
           test -x "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" || {
             echo "sdkmanager was not installed by Buildozer bootstrap"
-            exit "$FIRST_STATUS"
+            exit 1
           }
 
+          # Re-apply the licenses after Buildozer creates the SDK in case its
+          # bootstrap replaced the SDK directory.
           mkdir -p "$ANDROID_SDK_ROOT/licenses"
           printf '%s\n' \
             8933bad161af4178b1185d1a37fbf41ea5269c55 \
             d56f5187479451eabf01fb78af6dfcb131a6481e \
             24333f8a63b6825ea9c5514f83c2829b004d1fee \
             > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
-          printf '%s\n' 84831b9409646a918e30573bab4c9c91346d8abd \
+          printf '%s\n' \
+            84831b9409646a918e30573bab4c9c91346d8abd \
             > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
 
-          yes | "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
-
+          echo "y" | "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
           echo "Android SDK license bootstrap complete."
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
