@@ -8,7 +8,7 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -39,17 +39,43 @@ jobs:
           python -m compileall -q main.py tests
           python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Bootstrap Android SDK and accept licenses
+        shell: bash
+        run: |
+          set -uo pipefail
+          rm -rf .buildozer bin
+          export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          set +e
+          buildozer android debug 2>&1 | tee buildozer-bootstrap.log
+          FIRST_STATUS=${PIPESTATUS[0]}
+          set -e
+          echo "Initial Buildozer status: $FIRST_STATUS"
+
+          test -x "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" || {
+            echo "sdkmanager was not installed by Buildozer bootstrap"
+            exit "$FIRST_STATUS"
+          }
+
+          mkdir -p "$ANDROID_SDK_ROOT/licenses"
+          printf '%s\n' \
+            8933bad161af4178b1185d1a37fbf41ea5269c55 \
+            d56f5187479451eabf01fb78af6dfcb131a6481e \
+            24333f8a63b6825ea9c5514f83c2829b004d1fee \
+            > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          printf '%s\n' 84831b9409646a918e30573bab4c9c91346d8abd \
+            > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
+
+          yes | "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+
+          echo "Android SDK license bootstrap complete."
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
       - name: Build APK
         shell: bash
         run: |
           set -euxo pipefail
-          rm -rf .buildozer bin
-          SDKROOT="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDKROOT/licenses"
-          printf '%s\n' 8933bad161af4178b1185d1a37fbf41ea5269c55 d56f5187479451eabf01fb78af6dfcb131a6481e > "$SDKROOT/licenses/android-sdk-license"
-          printf '%s\n' 84831b9409646a918e30573bab4c9c91346d8abd > "$SDKROOT/licenses/android-sdk-preview-license"
-          export ANDROID_SDK_ROOT="$SDKROOT"
-          export ANDROID_HOME="$SDKROOT"
           buildozer android debug 2>&1 | tee buildozer-console.log
 
       - name: Verify APK
@@ -73,6 +99,7 @@ jobs:
         with:
           name: ROLEX-AI-build-diagnostics
           path: |
+            buildozer-bootstrap.log
             buildozer-console.log
             .buildozer/**/*.log
           if-no-files-found: ignore
