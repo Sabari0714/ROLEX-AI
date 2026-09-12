@@ -66,10 +66,8 @@ jobs:
           test -x "$LATEST/bin/sdkmanager"
           "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --version
 
-          # Accept every SDK license non-interactively before Buildozer/p4a runs.
           yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses.log || true
 
-          # Install the SDK components Buildozer/p4a needs explicitly.
           "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platform-tools" \
             "platforms;android-34" \
@@ -81,10 +79,16 @@ jobs:
           # Verify the exact tools Buildozer/p4a will need.
           test -x "$SDK/platform-tools/adb"
           test -x "$SDK/build-tools/37.0.0/aidl"
-          printf 'package smoke;\n' > /tmp/smoke.aidl
+          cat > /tmp/smoke.aidl <<'EOF'
+package smoke;
+interface Smoke {
+    void ping();
+}
+EOF
+          rm -rf /tmp/aidl-out
           mkdir -p /tmp/aidl-out
           "$SDK/build-tools/37.0.0/aidl" --lang=java -o /tmp/aidl-out /tmp/smoke.aidl
-          test -f /tmp/aidl-out/smoke.java || test -f /tmp/aidl-out/smoke.java
+          test -f /tmp/aidl-out/smoke/Smoke.java
           test -d "$SDK/ndk/28.2.13676358"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
