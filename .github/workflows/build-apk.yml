@@ -46,51 +46,47 @@ jobs:
           rm -rf .buildozer bin
 
           SDK="$GITHUB_WORKSPACE/.buildozer/android/platform/android-sdk"
-          TOOLS="$SDK/tools"
-          mkdir -p "$SDK" "$TOOLS"
+          LATEST="$SDK/cmdline-tools/latest"
+          mkdir -p "$SDK/cmdline-tools"
 
           # Official latest Android command-line tools (Linux x86_64).
-          # Current official revision: 15859902.
           curl -fL --retry 5 --retry-all-errors \
             -o /tmp/android-cmdline-tools.zip \
             https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
 
-          rm -rf /tmp/cmdline-tools
+          rm -rf /tmp/cmdline-tools "$LATEST"
           mkdir -p /tmp/cmdline-tools
           unzip -q /tmp/android-cmdline-tools.zip -d /tmp/cmdline-tools
-          mv /tmp/cmdline-tools/cmdline-tools/* "$TOOLS/"
+          mv /tmp/cmdline-tools/cmdline-tools "$LATEST"
 
           export ANDROIDSDK="$SDK"
           export ANDROID_HOME="$SDK"
-          export PATH="$TOOLS/bin:$PATH"
+          export PATH="$LATEST/bin:$PATH"
 
-          test -x "$TOOLS/bin/sdkmanager"
-          "$TOOLS/bin/sdkmanager" --version
+          test -x "$LATEST/bin/sdkmanager"
+          "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --version
 
           # Accept every SDK license non-interactively before Buildozer/p4a runs.
-          yes | "$TOOLS/bin/sdkmanager" --licenses >/tmp/sdk-licenses.log || true
+          yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses.log || true
 
           # Install the SDK components Buildozer/p4a needs explicitly.
-          "$TOOLS/bin/sdkmanager" --install \
+          "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platform-tools" \
             "platforms;android-34" \
-            "build-tools;37.0.0"
+            "build-tools;37.0.0" \
+            "ndk;28.2.13676358"
 
-          # p4a currently recommends NDK r28c for this build; install it explicitly.
-          "$TOOLS/bin/sdkmanager" --install "ndk;28.2.13676358"
+          yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses-final.log || true
 
-          yes | "$TOOLS/bin/sdkmanager" --licenses >/tmp/sdk-licenses-final.log || true
-
-          # Buildozer's p4a path historically looks for tools/bin/sdkmanager.
-          # Keep the SDK in that compatible layout and verify AIDL is present.
-          test -x "$TOOLS/bin/sdkmanager"
-          AIDL="$SDK/build-tools/37.0.0/aidl"
-          test -x "$AIDL"
-          "$AIDL" --version
+          # Verify the exact tools Buildozer/p4a will need.
+          test -x "$SDK/platform-tools/adb"
+          test -x "$SDK/build-tools/37.0.0/aidl"
+          "$SDK/build-tools/37.0.0/aidl" --version
+          test -d "$SDK/ndk/28.2.13676358"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "$TOOLS/bin" >> "$GITHUB_PATH"
+          echo "$LATEST/bin" >> "$GITHUB_PATH"
 
       - name: Build APK
         shell: bash
