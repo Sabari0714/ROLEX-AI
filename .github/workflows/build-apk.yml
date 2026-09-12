@@ -81,7 +81,10 @@ jobs:
           # Verify the exact tools Buildozer/p4a will need.
           test -x "$SDK/platform-tools/adb"
           test -x "$SDK/build-tools/37.0.0/aidl"
-          "$SDK/build-tools/37.0.0/aidl" 2>&1 | head -n 5
+          printf 'package smoke;\n' > /tmp/smoke.aidl
+          mkdir -p /tmp/aidl-out
+          "$SDK/build-tools/37.0.0/aidl" --lang=java -o /tmp/aidl-out /tmp/smoke.aidl
+          test -f /tmp/aidl-out/smoke.java || test -f /tmp/aidl-out/smoke.java
           test -d "$SDK/ndk/28.2.13676358"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
