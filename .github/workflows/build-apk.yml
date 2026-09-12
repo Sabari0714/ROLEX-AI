@@ -27,19 +27,33 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git curl wget zip unzip openjdk-17-jdk libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev
+          sudo apt-get install -y git curl wget zip unzip openjdk-17-jdk libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev cmake
 
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython==0.29.37
+          python -m pip install -r requirements.txt
 
-      - name: Compile and unit test
+      - name: Compile, unit test and runtime smoke test
+        shell: bash
         run: |
-          python -m compileall -q main.py tests
+          set -euxo pipefail
+          python -m compileall -q main.py rolex_ai tests
           python -m unittest discover -s tests -p 'test_*.py' -v
+          printf 'exit\n' | ROLEX_UI=0 python main.py
+          python - <<'PY'
+          from rolex_ai.app import RolexAI
+          app = RolexAI()
+          status = app.status()
+          assert status['app'] == 'ROLEX AI'
+          assert status['modules']['brain'] is True
+          assert status['modules']['math'] is True
+          assert status['modules']['personal_intelligence'] is True
+          print('ROLEX runtime smoke test: PASS')
+          PY
 
-      - name: Bootstrap Android SDK, latest command-line tools, licenses and AIDL
+      - name: Bootstrap Android SDK, licenses and exact Buildozer NDK
         shell: bash
         run: |
           set -euxo pipefail
@@ -49,7 +63,7 @@ jobs:
           LATEST="$SDK/cmdline-tools/latest"
           mkdir -p "$SDK/cmdline-tools"
 
-          # Official latest Android command-line tools (Linux x86_64).
+          # Official Android command-line tools for Linux x86_64.
           curl -fL --retry 5 --retry-all-errors \
             -o /tmp/android-cmdline-tools.zip \
             https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
@@ -61,38 +75,33 @@ jobs:
 
           export ANDROIDSDK="$SDK"
           export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
           export PATH="$LATEST/bin:$PATH"
 
           test -x "$LATEST/bin/sdkmanager"
           "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --version
 
           yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses.log || true
-
           "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;37.0.0" \
-            "ndk;28.2.13676358"
-
+            "ndk;25.1.8937393"
           yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses-final.log || true
 
-          # Verify the exact tools Buildozer/p4a will need.
+          # Verify the exact SDK/NDK components selected by buildozer.spec.
           test -x "$SDK/platform-tools/adb"
           test -x "$SDK/build-tools/37.0.0/aidl"
-          cat > /tmp/smoke.aidl <<'EOF'
-package smoke;
-interface Smoke {
-    void ping();
-}
-EOF
-          rm -rf /tmp/aidl-out
-          mkdir -p /tmp/aidl-out
-          "$SDK/build-tools/37.0.0/aidl" --lang=java -o /tmp/aidl-out /tmp/smoke.aidl
-          test -f /tmp/aidl-out/smoke/Smoke.java
-          test -d "$SDK/ndk/28.2.13676358"
+          test -d "$SDK/platforms/android-34"
+          test -d "$SDK/ndk/25.1.8937393"
+          "$SDK/build-tools/37.0.0/aidl" --version >/tmp/aidl-version.log 2>&1 || true
+          "$SDK/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROIDNDK=$SDK/ndk/25.1.8937393" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$SDK/ndk/25.1.8937393" >> "$GITHUB_ENV"
           echo "$LATEST/bin" >> "$GITHUB_PATH"
 
       - name: Build APK
@@ -109,6 +118,7 @@ EOF
           APK="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$APK"
           ls -lh "$APK"
+          file "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
