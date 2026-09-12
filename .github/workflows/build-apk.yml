@@ -27,7 +27,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev
+          sudo apt-get install -y git curl wget zip unzip openjdk-17-jdk libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev
 
       - name: Install Python build tools
         run: |
@@ -39,15 +39,64 @@ jobs:
           python -m compileall -q main.py tests
           python -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Build APK
+      - name: Bootstrap Android SDK, latest command-line tools, licenses and AIDL
         shell: bash
         run: |
           set -euxo pipefail
           rm -rf .buildozer bin
-          # Do not pre-create .buildozer/android/platform/android-sdk.
-          # Buildozer must bootstrap its own SDK and sdkmanager; pre-creating
-          # this directory makes Buildozer incorrectly treat an empty SDK as
-          # already installed and then fail at tools/bin/sdkmanager lookup.
+
+          SDK="$GITHUB_WORKSPACE/.buildozer/android/platform/android-sdk"
+          TOOLS="$SDK/tools"
+          mkdir -p "$SDK" "$TOOLS"
+
+          # Official latest Android command-line tools (Linux x86_64).
+          # Current official revision: 15859902.
+          curl -fL --retry 5 --retry-all-errors \
+            -o /tmp/android-cmdline-tools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+
+          rm -rf /tmp/cmdline-tools
+          mkdir -p /tmp/cmdline-tools
+          unzip -q /tmp/android-cmdline-tools.zip -d /tmp/cmdline-tools
+          mv /tmp/cmdline-tools/cmdline-tools/* "$TOOLS/"
+
+          export ANDROIDSDK="$SDK"
+          export ANDROID_HOME="$SDK"
+          export PATH="$TOOLS/bin:$PATH"
+
+          test -x "$TOOLS/bin/sdkmanager"
+          "$TOOLS/bin/sdkmanager" --version
+
+          # Accept every SDK license non-interactively before Buildozer/p4a runs.
+          yes | "$TOOLS/bin/sdkmanager" --licenses >/tmp/sdk-licenses.log || true
+
+          # Install the SDK components Buildozer/p4a needs explicitly.
+          "$TOOLS/bin/sdkmanager" --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;37.0.0"
+
+          # p4a currently recommends NDK r28c for this build; install it explicitly.
+          "$TOOLS/bin/sdkmanager" --install "ndk;28.2.13676358"
+
+          yes | "$TOOLS/bin/sdkmanager" --licenses >/tmp/sdk-licenses-final.log || true
+
+          # Buildozer's p4a path historically looks for tools/bin/sdkmanager.
+          # Keep the SDK in that compatible layout and verify AIDL is present.
+          test -x "$TOOLS/bin/sdkmanager"
+          AIDL="$SDK/build-tools/37.0.0/aidl"
+          test -x "$AIDL"
+          "$AIDL" --version
+
+          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$TOOLS/bin" >> "$GITHUB_PATH"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf bin
           buildozer android debug 2>&1 | tee buildozer-console.log
 
       - name: Verify APK
