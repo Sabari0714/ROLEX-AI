@@ -53,56 +53,56 @@ jobs:
           print('ROLEX runtime smoke test: PASS')
           PY
 
-      - name: Bootstrap Android SDK, licenses and exact Buildozer NDK
+      - name: Bootstrap Buildozer SDK, licenses and NDK
         shell: bash
         run: |
           set -euxo pipefail
-          rm -rf .buildozer bin
+          rm -rf "$HOME/.buildozer/android/platform/android-sdk" \
+                 "$HOME/.buildozer/android/platform/android-ndk-r28c" \
+                 "$HOME/.buildozer/android/platform/python-for-android" \
+                 bin .buildozer
 
-          SDK="$GITHUB_WORKSPACE/.buildozer/android/platform/android-sdk"
-          LATEST="$SDK/cmdline-tools/latest"
-          mkdir -p "$SDK/cmdline-tools"
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          TOOLS="$SDK/cmdline-tools/latest"
+          mkdir -p "$SDK/cmdline-tools" "$SDK/tools/bin" "$SDK/licenses"
 
-          # Official Android command-line tools for Linux x86_64.
           curl -fL --retry 5 --retry-all-errors \
             -o /tmp/android-cmdline-tools.zip \
             https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+          unzip -q /tmp/android-cmdline-tools.zip -d /tmp/android-cmdline-tools
+          mv /tmp/android-cmdline-tools/cmdline-tools "$TOOLS"
 
-          rm -rf /tmp/cmdline-tools "$LATEST"
-          mkdir -p /tmp/cmdline-tools
-          unzip -q /tmp/android-cmdline-tools.zip -d /tmp/cmdline-tools
-          mv /tmp/cmdline-tools/cmdline-tools "$LATEST"
+          ln -sf "$TOOLS/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
+          ln -sf "$TOOLS/bin/avdmanager" "$SDK/tools/bin/avdmanager"
 
           export ANDROIDSDK="$SDK"
           export ANDROID_HOME="$SDK"
           export ANDROID_SDK_ROOT="$SDK"
-          export PATH="$LATEST/bin:$PATH"
+          export PATH="$TOOLS/bin:$SDK/tools/bin:$PATH"
 
-          test -x "$LATEST/bin/sdkmanager"
-          "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --version
-
-          yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses.log || true
-          "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --install \
+          yes | "$TOOLS/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses.log || true
+          "$TOOLS/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;37.0.0" \
-            "ndk;25.1.8937393"
-          yes | "$LATEST/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses-final.log || true
+            "ndk;28.2.13676358"
+          yes | "$TOOLS/bin/sdkmanager" --sdk_root="$SDK" --licenses >/tmp/sdk-licenses-final.log || true
 
-          # Verify the exact SDK/NDK components selected by buildozer.spec.
+          test -x "$SDK/tools/bin/sdkmanager"
           test -x "$SDK/platform-tools/adb"
           test -x "$SDK/build-tools/37.0.0/aidl"
           test -d "$SDK/platforms/android-34"
-          test -d "$SDK/ndk/25.1.8937393"
-          "$SDK/build-tools/37.0.0/aidl" --version >/tmp/aidl-version.log 2>&1 || true
-          "$SDK/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version
+          test -d "$SDK/ndk/28.2.13676358"
+
+          ln -s "$SDK/ndk/28.2.13676358" "$HOME/.buildozer/android/platform/android-ndk-r28c"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROIDNDK=$SDK/ndk/25.1.8937393" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$SDK/ndk/25.1.8937393" >> "$GITHUB_ENV"
-          echo "$LATEST/bin" >> "$GITHUB_PATH"
+          echo "ANDROIDNDK=$HOME/.buildozer/android/platform/android-ndk-r28c" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r28c" >> "$GITHUB_ENV"
+          echo "$TOOLS/bin" >> "$GITHUB_PATH"
+          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
 
       - name: Build APK
         shell: bash
@@ -135,4 +135,5 @@ jobs:
           path: |
             buildozer-console.log
             .buildozer/**/*.log
+            $HOME/.buildozer/android/platform/**/*.log
           if-no-files-found: ignore

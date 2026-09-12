@@ -19,11 +19,12 @@ warn_on_root = 1
 [app:android]
 android.api = 34
 android.minapi = 23
-android.ndk = 25b
+android.ndk = 28c
 android.ndk_api = 23
 android.archs = arm64-v8a
 android.accept_sdk_license = True
-# Use the stable python-for-android line with the Python 3.11 CI environment.
+android.skip_update = True
+# Use the stable python-for-android master line with the Python 3.11 CI environment.
 p4a.branch = master
 # Keep native ML packages out of the APK unless a tested p4a recipe is added.
 # Current vision/face adapters are optional and safely degrade when unavailable.
