@@ -20,10 +20,11 @@ warn_on_root = 1
 android.api = 34
 android.minapi = 23
 android.ndk = 25b
+android.ndk_api = 23
 android.archs = arm64-v8a
-# Use the current python-for-android development line containing the
-# charset-normalizer wheel compatibility fix for the Python 3.14 target.
-p4a.branch = develop
+android.accept_sdk_license = True
+# Use the stable python-for-android line with the Python 3.11 CI environment.
+p4a.branch = master
 # Keep native ML packages out of the APK unless a tested p4a recipe is added.
 # Current vision/face adapters are optional and safely degrade when unavailable.
 android.permissions = INTERNET,RECORD_AUDIO,CAMERA,USE_BIOMETRIC,POST_NOTIFICATIONS,SEND_SMS,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,FOREGROUND_SERVICE
